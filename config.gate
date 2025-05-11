@@ -1,0 +1,9 @@
+thread=8
+logger=nil
+harbor=0
+start="main"
+lua_path="./skynet/lualib/?.lua;".."./skynet/lualib/?/init.lua".."./lualib/?.lua;"
+luaservice = "./skynet/service/?.lua;".."./gate/?.lua;"
+lualoader = "./skynet/lualib/loader.lua"
+cpath = "./skynet/cservice/?.so;".."cservice/?.so;"
+lua_cpath = "./skynet/luaclib/?.so;".."./luaclib/?.so;"

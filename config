@@ -1,0 +1,9 @@
+thread=8
+logger=uil   -- 日志 默认控制台
+harbor=0
+start="main"  -- 启动的第一个服务
+lua_path="./skynet/lualib/?.lua;./skynet/lualib/?/init.lua;"    --加载的lua路径
+luaservice="./skynet/service/?.lua;./app/?.lua;"   --lua服务
+lualoader="./skynet/lualib/loader.lua"
+cpath="./skynet/cservice/?.so"   --c服务
+lua_cpath="./skynet/luaclib/?.so"
