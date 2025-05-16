@@ -3,8 +3,16 @@ local c = require "zset.core"
 local _M = {}
 
 function _M:zadd(score, member)
-    self.__ud__:update({}, {score, member})
-    self[member] = score
+    if not self[member] then
+        self.__ud__:update({}, {score, member})
+        self[member] = score
+    else
+        local oldScore = self[member]
+        if self.__ud__:update_score(member, oldScore, oldScore+score) then
+            self[member] = oldScore+score
+        end
+
+    end
 end
 
 function _M:zrem(member)
@@ -57,6 +65,10 @@ function _M:zrange(start, stop)
     return self.__ud__:get_rank_range(start, stop)
 end
 
+function _M:zget_zset_data()
+    return self.__ud__:get_zset_data()
+end
+
 function _M:dump()
     self.__ud__:dump()
 end
@@ -71,7 +83,6 @@ end
 
 function _M.new(zspoint)
     local ud, lud, zset = c.new(zspoint)
-    print("new", ud, lud, zset)
     if not zset then zset = {} end
     zset.__ud__ = ud
     zset.__lud__ = lud

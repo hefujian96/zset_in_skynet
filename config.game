@@ -1,0 +1,9 @@
+thread=8 --工作线程数量 cpu有多少个核心数 线程池的数量就是多少
+logger=nil
+harbor=0
+start="main" -- 启动第一个服务 
+lua_path="./skynet/lualib/?.lua;".."./skynet/lualib/?/init.lua;".."./lualib/?.lua;"
+luaservice = "./skynet/service/?.lua;".."./game/?.lua;"
+lualoader = "./skynet/lualib/loader.lua"
+cpath = "./skynet/cservice/?.so;".."cservice/?.so;"
+lua_cpath = "./skynet/luaclib/?.so;".."./luaclib/?.so;"

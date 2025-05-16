@@ -336,3 +336,46 @@ zskiplistNode *zslLastInRange(zskiplist *sl, double min, double max) {
 	/* This is an inner range, so this node cannot be NULL. */
 	return x;
 }
+
+void zslUpdateScore(zskiplist *zsl, double curscore, sds *ele, double newscore, struct skynet_context *ctx) {
+	zskiplistNode *update[ZSKIPLIST_MAXLEVEL], *x;
+    int i;
+
+    /* We need to seek to element to update to start: this is useful anyway,
+     * we'll have to update or remove it. */
+    x = zsl->header;
+    for (i = zsl->level-1; i >= 0; i--) {
+        while (x->level[i].forward &&
+                (x->level[i].forward->score < curscore ||
+                    (x->level[i].forward->score == curscore &&
+						comparesds(x->level[i].forward->obj,ele) < 0)))
+        {
+            x = x->level[i].forward;
+        }
+        update[i] = x;
+    }
+
+    /* Jump to our element: note that this function assumes that the
+     * element with the matching score exists. */
+    x = x->level[0].forward;
+
+    /* If the node, after the score update, would be still exactly
+     * at the same position, we can just update the score without
+     * actually removing and re-inserting the element in the skiplist. */
+    if ((x->backward == NULL || x->backward->score < newscore) &&
+        (x->level[0].forward == NULL || x->level[0].forward->score > newscore))
+    {
+        x->score = newscore;
+        return;
+    }
+
+    /* No way to reuse the old node: we need to remove and insert a new
+     * one at a different place. */
+    zslDeleteNode(zsl, x, update);
+    zslInsert(zsl,newscore,x->obj);
+    /* We reused the old node x->ele SDS string, free the node now
+     * since zslInsert created a new one. */
+    // x->obj = NULL;
+    // zslFreeNode(x);
+	return;
+}

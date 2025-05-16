@@ -43,4 +43,6 @@ zskiplistNode* zslGetNodeByRank(zskiplist *sl, unsigned long rank);
 zskiplistNode *zslFirstInRange(zskiplist *sl, double min, double max);
 zskiplistNode *zslLastInRange(zskiplist *sl, double min, double max);
 
+void zslUpdateScore(zskiplist *sl, double curscore, sds *obj, double newscore, struct skynet_context *ctx);
+
 #endif	/*end ifndef*/

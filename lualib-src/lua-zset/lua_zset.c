@@ -83,6 +83,26 @@ get_userdata(lua_State *L) {
 	return (struct ud_zset *)luaL_checkudata(L, 1, "mk.zset");
 }
 
+static int 
+lupdate_score(lua_State *L) {
+	struct ud_zset *uzs = get_userdata(L);
+	struct zset *zs = uzs->zs;
+	luaL_checktype(L, 2, LUA_TSTRING);
+
+	size_t strlen = 0;
+	const char* ptr = lua_tolstring(L, 2, &strlen);
+	sds *obj = zslCreateSds(ptr, strlen);
+
+	double oldScore = luaL_checknumber(L, 3);
+	double score = luaL_checknumber(L, 4);
+
+	struct skynet_context *ctx = get_skynet_context(L);
+	zslUpdateScore(zs->zsl, oldScore, obj, score, ctx);
+
+	lua_pushboolean(L, 1);
+	return 1;
+}
+
 static int
 lupdate(lua_State *L) {
 	struct ud_zset *uzs = get_userdata(L);
@@ -266,18 +286,38 @@ ldump(lua_State *L) {
 	return 0;
 }
 
-static void
-get_zset_data(lua_State *L, struct zset *zs) {
+static int
+lget_zset_data(lua_State *L) {
+	struct ud_zset *uzs = get_userdata(L);
+	struct zset *zs = uzs->zs;
 	zskiplistNode *x;
 	x = zs->zsl->header;
-	lua_createtable(L, 0, zs->zsl->length);
+	lua_createtable(L, 0, zs->zsl->length);   //创建空表压栈
+	int i = 1;
 	while(x->level[0].forward) {
 		x = x->level[0].forward;
 		lua_pushlstring(L, x->obj->ptr, x->obj->length);
+		lua_rawseti(L, -2, i);
 		lua_pushnumber(L, x->score);
-		lua_rawset(L, -3);
+		lua_rawseti(L, -2, i+1);
+		i+=2;
 	}
+	return 1;
 }
+
+// static int
+// lget_zset_data_1(lua_State *L, struct zset *zs) {
+// 	zskiplistNode *x;
+// 	x = zs->zsl->header;
+// 	lua_createtable(L, 0, zs->zsl->length);   //创建空表压栈
+// 	while(x->level[0].forward) {
+// 		x = x->level[0].forward;
+// 		lua_pushlstring(L, x->obj->ptr, x->obj->length);
+// 		lua_pushnumber(L, x->score);
+// 		lua_rawset(L, -3);
+// 	}
+// 	return 1;
+// }
 
 static int
 lrelease(lua_State *L) {
@@ -290,47 +330,50 @@ lrelease(lua_State *L) {
 
 static void
 zset_metatable(lua_State *L) {
-	if (luaL_newmetatable(L, "mk.zset")) {
+	if (luaL_newmetatable(L, "mk.zset")) { //从注册表中查询键"mk.zset",为用户数据的元表创建一张新表。 向这张表加入 __name = tname 键值对， 并将 [tname] = new table 添加到注册表中， 返回 1
 		luaL_Reg m[] = {
 			{"update", lupdate},
+			{"update_score", lupdate_score},
 			{"delete_by_rank", ldelete_by_rank},
 
 			{"get_count", lget_count},
 			{"get_rank", lget_rank},
 			{"get_rank_range", lget_rank_range},
 			{"get_score_range", lget_score_range},
+			{"get_zset_data", lget_zset_data},
+			// {"get_zset_data_1", lget_zset_data_1},
 
 			{"dump", ldump},
 			{NULL, NULL},
 		};
-		luaL_newlib(L, m);
-		lua_setfield(L, -2, "__index");
-		lua_pushcfunction(L, lrelease);
-		lua_setfield(L, -2, "__gc");
+		luaL_newlib(L, m);         //创建一张表，并把列表 m 中的函数注册进去
+		lua_setfield(L, -2, "__index");  //给索引-2的userdata q设置元方法__index，当索引表的key不是表或者不存在时，触发__index方法
+		lua_pushcfunction(L, lrelease);   //压入一个c function 
+		lua_setfield(L, -2, "__gc");    //当元表的gc方法触发时，会调用lrelease
 	}
 }
 
 static int
 lnew(lua_State *L) {
 	struct skynet_context *ctx = get_skynet_context(L);
-	if (!lua_isnoneornil(L, 1)) { //传了值
+	if (!lua_isnoneornil(L, 1)) { 			//如果是多个lua服务共享zset，新创建的lua服务需要向已创建zset的lua服务获取lud传递过来
 		skynet_error(ctx, "new1");
-		struct zset * zs = lua_touserdata(L, 1);
+		struct zset * zs = lua_touserdata(L, 1);  //获取lua传过来的lud
 		if (zs == NULL) {
 			return luaL_error(L, "need struct zset * lightuserdata");
 		}
-		struct ud_zset *q = (struct ud_zset*)lua_newuserdata(L, sizeof(struct ud_zset));
-		q->zs = zset_clone(zs);
-		lua_pushlightuserdata(L, zs);
-		zset_metatable(L);
-		lua_setmetatable(L, -3);
-		get_zset_data(L, zs);
+		struct ud_zset *q = (struct ud_zset*)lua_newuserdata(L, sizeof(struct ud_zset));  //创建一个userdata q并压栈
+		q->zs = zset_clone(zs);  
+		lua_pushlightuserdata(L, zs);   //压入lightuserdata
+		zset_metatable(L);            //生成一张表并压栈
+		lua_setmetatable(L, -3);      //把zset_metatable()生成的表弹栈，并将其设为userdata q的元表
+		// lget_zset_data_1(L, zs);
 		return 3;
 	}
 	skynet_error(ctx, "new2");
-	struct ud_zset *q = (struct ud_zset*)lua_newuserdata(L, sizeof(struct ud_zset));
+	struct ud_zset *q = (struct ud_zset*)lua_newuserdata(L, sizeof(struct ud_zset)); //创建一个userdata q并压栈
 	struct zset * zs = zset_new(L);
-	q->zs = zs;
+	q->zs = zs;   //单服务使用zset时不需要加锁
 	lua_pushlightuserdata(L, zs);
 	zset_metatable(L);
 	lua_setmetatable(L, -3);

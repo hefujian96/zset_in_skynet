@@ -1,0 +1,7 @@
+{
+    "files.associations": {
+        "skynet.h": "c",
+        "array": "c",
+        "string_view": "c"
+    }
+}
